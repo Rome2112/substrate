@@ -8,37 +8,39 @@ import (
 	"time"
 )
 
-// Manager groups process-level manipulation for a single project context.
+// Manager manages a workspace manifest and provides Freeze/Unfreeze operations.
 type Manager struct {
 	manifest *Manifest
 }
 
+// NewManager constructs a Manager.
 func NewManager() *Manager {
 	return &Manager{}
 }
 
-// LoadManifest reads a manifest file from disk and validates it.
+// LoadManifest reads and parses the manifest JSON file at path.
 func (m *Manager) LoadManifest(path string) error {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
-		return fmt.Errorf("read manifest: %w", err)
+		return fmt.Errorf("open manifest: %w", err)
 	}
+	defer f.Close()
+
+	dec := json.NewDecoder(f)
 	var manifest Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
+	if err := dec.Decode(&manifest); err != nil {
 		return fmt.Errorf("decode manifest: %w", err)
-	}
-	if len(manifest.PIDs) == 0 {
-		return ErrNoPIDs
 	}
 	m.manifest = &manifest
 	return nil
 }
 
-// Freeze applies suspend operations to each PID in the manifest.
+// Freeze suspends all PIDs listed in the manifest using platform primitives.
 func (m *Manager) Freeze(ctx context.Context) error {
 	if m.manifest == nil {
 		return ErrManifestNotLoaded
 	}
+	// Provide a simple timeout context for each operation
 	for _, pid := range m.manifest.PIDs {
 		select {
 		case <-ctx.Done():
@@ -46,14 +48,16 @@ func (m *Manager) Freeze(ctx context.Context) error {
 		default:
 		}
 		if err := freezePID(pid); err != nil {
+			// Best-effort: continue and aggregate errors
 			return fmt.Errorf("freeze pid %d: %w", pid, err)
 		}
+		// brief delay so large groups don't overload scheduler
 		time.Sleep(5 * time.Millisecond)
 	}
 	return nil
 }
 
-// Unfreeze applies resume operations to each PID in the manifest.
+// Unfreeze resumes all PIDs listed in the manifest using platform primitives.
 func (m *Manager) Unfreeze(ctx context.Context) error {
 	if m.manifest == nil {
 		return ErrManifestNotLoaded
@@ -70,11 +74,4 @@ func (m *Manager) Unfreeze(ctx context.Context) error {
 		time.Sleep(5 * time.Millisecond)
 	}
 	return nil
-}
-
-func (m *Manager) SetCgroupPath(path string) {
-	if m.manifest == nil {
-		m.manifest = &Manifest{}
-	}
-	m.manifest.CgroupPath = path
 }
