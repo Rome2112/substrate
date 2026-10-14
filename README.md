@@ -1,56 +1,64 @@
 # Substrate
 
 Substrate is a lightweight, zero-dependency, native-local invariant execution suite written in Go.
-It provides lightweight process isolation, ephemeral memory-resident secrets, and command safety
-validation for local developer workflows across Linux, macOS, and Windows.
+It provides process-level boundary isolation, ephemeral memory security for runtime secrets, and
+command safety validation on Linux, macOS and Windows.
 
-The repository includes three primary tools:
+This repository contains three small core tools packaged as subcommands:
 
-- ramguard: ephemeral injection of secret environment variables without writing plaintext files
-- procfreeze: suspend/resume workspace processes using native OS process primitives and optional cgroup v2 support
-- execgate: detect high-risk commands, display a dependency blast radius, and require confirmation before execution
+- ramguard — ephemeral environment injection for secrets without writing plaintext to disk.
+- procfreeze — lightweight process grouping and suspend/resume primitives.
+- execgate — a safety filter that intercepts high-risk shell commands and displays a dependency "blast radius".
 
-Project layout
---------------
+Design goals:
+- Zero heavy dependencies; only Go standard library.
+- Small, auditable binary and low latency.
+- Cross-platform support (Linux, macOS, Windows) with proper build tags and graceful fallbacks on unsupported OS primitives.
+- Clear error types and non-panicking behavior.
 
-- `cmd/substrate/main.go` — CLI entrypoint for the three subcommands
-- `pkg/ramguard/` — secret injection and secure execution
-- `pkg/procfreeze/` — process grouping, freeze/unfreeze, and manifest-driven workspace control
-- `pkg/execgate/` — risky command scanning and blast-radius analysis
-- `examples/` — sample manifests and usage scripts
-- `.github/workflows/ci.yml` — CI workflow covering Go tests on Ubuntu, macOS, and Windows
+Quick build
+-----------
+From repository root:
 
-Build
------
+go build -o substrate ./cmd/substrate
 
-From the repository root:
-
-    go build -o substrate ./cmd/substrate
+This produces a single `substrate` binary containing three subcommands.
 
 Usage
 -----
+Run the binary with the subcommand name:
 
-    ./substrate ramguard --path /usr/bin/env --secret "API_TOKEN=s3cr3t" --args ""
-    ./substrate procfreeze --manifest ./examples/workspace_manifest.json freeze
-    ./substrate procfreeze --manifest ./examples/workspace_manifest.json unfreeze
-    ./substrate execgate --cmd "rm -rf ./dist" --force-intent
+./substrate ramguard --path /usr/bin/printenv --secret SECRET=foo
+./substrate procfreeze --manifest workspace_manifest.json freeze
+./substrate procfreeze --manifest workspace_manifest.json unfreeze
+./substrate execgate --cmd "rm -rf ./dist"           # will prompt for confirmation
+./substrate execgate --cmd "rm -rf ./dist" --force-intent  # bypass prompt
 
-Security model
+Project layout
 --------------
+- /cmd/substrate/main.go         - CLI entrypoint with three subcommands.
+- /pkg/ramguard/                 - RamGuard package (ephemeral env injection).
+- /pkg/procfreeze/               - ProcFreeze package (process grouping and freeze/unfreeze).
+- /pkg/execgate/                 - ExecGate package (command filtering and blast-radius scan).
+- /go.mod
+- /README.md
 
-- `ramguard` injects variables directly into the child process environment without writing them to `.env` files.
-- It attempts to zero the memory slice that owns the secret values immediately after the child exits.
-- `procfreeze` uses native OS primitives for suspend/resume and supports optional Linux cgroup v2 grouping.
-- `execgate` blocks unsafe command execution unless the caller provides confirmation or passes `--force-intent`.
+Security notes
+--------------
+- ramguard attempts to minimize secret lifetime in memory by zeroing owned buffers after child process termination. It cannot (and will not attempt to) modify OS or other process internals to zero memory beyond the process it spawns, and is not a cryptographic secret manager.
+- procfreeze uses native OS primitives where available; on platforms without native APIs implemented, it will return descriptive errors.
+- execgate is a best-effort local safety filter; it does not replace CI/CD protections or sandboxing for production systems.
 
 Testing
 -------
+Each package contains unit tests. Run tests with:
 
-Run the full test suite:
+go test ./...
 
-    go test ./...
+Contributions
+-------------
+This repository is intentionally small and dependency-free. If you extend features that require more complex OS interactions, prefer optional, well-audited packages and keep the core small.
 
 License
 -------
-
-MIT
+(Choose your license and add here.)

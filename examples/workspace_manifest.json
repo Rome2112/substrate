@@ -1,0 +1,5 @@
+{
+  "name": "demo-workspace",
+  "pids": [12345],
+  "cgroup_path": "/sys/fs/cgroup/substrate-demo"
+}
